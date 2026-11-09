@@ -391,7 +391,7 @@ async function transmitUserPrompt() {
     };
 
     try {
-        const streamConnection = await fetch('http://' + ENDPOINT_TUNNEL + '/api/chat', {
+        const streamConnection = await fetch('https://' + ENDPOINT_TUNNEL + '/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
