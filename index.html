@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DHT</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=5" />
   </head>
   <body>
     <button
@@ -52,6 +52,15 @@
         New Thread
       </button>
 
+      <input
+        type="text"
+        id="search-input"
+        class="setting-input"
+        placeholder="Search chats (Alt+K)"
+        autocomplete="off"
+        spellcheck="false"
+      />
+
       <div class="section-divider">Conversations</div>
 
       <div class="history-scroll" id="history-list"></div>
@@ -78,6 +87,27 @@
 
     <main class="main-window">
       <div class="chat-viewport" id="chat-container"></div>
+
+      <button
+        class="scroll-bottom-btn"
+        id="scroll-bottom-btn"
+        aria-label="Scroll to bottom"
+        type="button"
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <polyline points="19 12 12 19 5 12" />
+        </svg>
+      </button>
 
       <footer class="interaction-dock">
         <div class="card input-bar-container">
@@ -131,6 +161,7 @@
             class="modal-close"
             id="settings-close"
             aria-label="Close Settings"
+            type="button"
           >
             <svg
               width="18"
@@ -146,24 +177,120 @@
             </svg>
           </button>
         </div>
-        <div class="section-divider">Theme</div>
-        <div class="theme-grid" id="theme-grid"></div>
-      </div>
-      <div class="section-divider">Server Endpoint</div>
-      <div class="endpoint-row">
-        <input
-          type="text"
-          id="endpoint-input"
-          placeholder="https://your-tunnel.trycloudflare.com"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <button type="button" class="endpoint-save" id="endpoint-save">
-          Save
-        </button>
+
+        <div class="setting-group">
+          <div class="section-divider">Theme</div>
+          <div class="theme-grid" id="theme-grid"></div>
+        </div>
+
+        <div class="setting-group">
+          <div class="section-divider">Server Endpoint</div>
+          <div class="endpoint-row">
+            <input
+              type="text"
+              id="endpoint-input"
+              placeholder="https://your-tunnel.trycloudflare.com"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button type="button" class="endpoint-save" id="endpoint-save">
+              Save
+            </button>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="section-divider">Model</div>
+          <input
+            type="text"
+            id="model-input"
+            class="setting-input"
+            placeholder="gemma3:4b"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <div class="setting-hint">Must match a model installed in Ollama.</div>
+        </div>
+
+        <div class="setting-group">
+          <div class="section-divider">Creativity</div>
+          <div class="slider-row">
+            <input
+              type="range"
+              id="temp-input"
+              min="0"
+              max="1"
+              step="0.1"
+              value="0.5"
+            />
+            <span id="temp-value">0.5</span>
+          </div>
+          <div class="setting-hint">Lower is more focused, higher is more creative.</div>
+        </div>
+
+        <div class="setting-group">
+          <div class="section-divider">Custom Instructions</div>
+          <textarea
+            id="instructions-input"
+            class="setting-input"
+            rows="3"
+            maxlength="600"
+            placeholder="How should DHT answer? (optional)"
+          ></textarea>
+        </div>
+
+        <div class="setting-group">
+          <div class="section-divider">Memory</div>
+          <label class="toggle-row" for="memory-toggle">
+            <input type="checkbox" id="memory-toggle" />
+            Use memory in replies
+          </label>
+          <label class="toggle-row" for="auto-memory-toggle">
+            <input type="checkbox" id="auto-memory-toggle" />
+            Learn facts automatically (slower)
+          </label>
+          <div class="memory-list" id="memory-list"></div>
+          <div class="endpoint-row">
+            <input
+              type="text"
+              id="memory-input"
+              class="setting-input"
+              placeholder="Add a fact to remember"
+              autocomplete="off"
+              maxlength="140"
+            />
+            <button type="button" class="endpoint-save" id="memory-add">
+              Add
+            </button>
+          </div>
+          <div class="btn-row">
+            <button type="button" class="setting-btn danger" id="memory-clear">
+              Clear Memory
+            </button>
+          </div>
+          <div class="setting-hint">
+            Tip: type "remember that ..." or "forget ..." in the chat.
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="section-divider">Data</div>
+          <div class="btn-row">
+            <button type="button" class="setting-btn" id="export-btn">
+              Export
+            </button>
+            <button type="button" class="setting-btn" id="import-btn">
+              Import
+            </button>
+            <button type="button" class="setting-btn danger" id="clear-chats-btn">
+              Delete All Chats
+            </button>
+          </div>
+          <input type="file" id="import-file" accept="application/json,.json" hidden />
+        </div>
       </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=5"></script>
   </body>
 </html>
