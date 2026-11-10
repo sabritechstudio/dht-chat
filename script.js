@@ -388,6 +388,41 @@ function buildApiMessages(session) {
   return [{ role: "system", content: SYSTEM_PROMPT }].concat(history);
 }
 
+function isLocalPage() {
+  const host = window.location.hostname;
+  return window.location.protocol === "file:" || host === "" || host === "localhost" || host === "127.0.0.1";
+}
+
+async function openStream(payload, signal) {
+  const base = getEndpointBase();
+
+  const direct = () =>
+    fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+      signal: signal,
+    });
+
+  if (isLocalPage()) return direct();
+
+  try {
+    const proxied = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-dht-target": base },
+      body: payload,
+      signal: signal,
+    });
+
+    if (proxied.headers.get("x-dht-proxy") === "1") return proxied;
+    if (proxied.status !== 404 && proxied.status !== 405) return proxied;
+  } catch (error) {
+    if (error.name === "AbortError") throw error;
+  }
+
+  return direct();
+}
+
 async function transmitUserPrompt() {
   if (isStreaming) {
     abortStream();
@@ -463,16 +498,14 @@ async function transmitUserPrompt() {
   };
 
   try {
-    const streamConnection = await fetch(getEndpointBase() + "/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+        const streamConnection = await openStream(
+      JSON.stringify({
         model: MODEL_NAME,
         messages: apiMessages,
         stream: true,
       }),
-      signal: abortController.signal,
-    });
+      abortController.signal,
+    );
 
     if (!streamConnection.ok) {
       const httpFault = new Error("HTTP " + streamConnection.status);
