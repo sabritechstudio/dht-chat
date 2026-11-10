@@ -2,10 +2,23 @@ export const config = { runtime: "edge" };
 
 const ALLOWED_SUFFIXES = [".trycloudflare.com"];
 
+function getCorsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,OPTIONS,PATCH,DELETE,POST,PUT",
+    "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, x-dht-target",
+    "Access-Control-Allow-Credentials": "true",
+    "x-dht-proxy": "1", // LOWERCASE to perfectly match Build 5's script.js!
+  };
+}
+
 function reply(status, message) {
   return new Response(JSON.stringify({ error: message }), {
     status: status,
-    headers: { "Content-Type": "application/json", "X-DHT-Proxy": "1" },
+    headers: { 
+      ...getCorsHeaders(),
+      "Content-Type": "application/json" 
+    },
   });
 }
 
@@ -19,6 +32,14 @@ function isAllowedHost(hostname) {
 }
 
 export default async function handler(request) {
+  // 1. Handle browser preflight OPTIONS requests effortlessly
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 200,
+      headers: getCorsHeaders(),
+    });
+  }
+
   if (request.method !== "POST") {
     return reply(405, "Method not allowed");
   }
@@ -49,13 +70,16 @@ export default async function handler(request) {
     return reply(502, "Tunnel unreachable: " + String(error && error.message ? error.message : error));
   }
 
+  // 2. Combine the upstream stream data with the required browser CORS permissions
+  const outboundHeaders = {
+    ...getCorsHeaders(),
+    "Content-Type": upstream.headers.get("Content-Type") || "application/x-ndjson",
+    "Cache-Control": "no-store",
+    "X-Accel-Buffering": "no",
+  };
+
   return new Response(upstream.body, {
     status: upstream.status,
-    headers: {
-      "Content-Type": upstream.headers.get("Content-Type") || "application/x-ndjson",
-      "Cache-Control": "no-store",
-      "X-Accel-Buffering": "no",
-      "X-DHT-Proxy": "1",
-    },
+    headers: outboundHeaders,
   });
 }
