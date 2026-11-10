@@ -5,10 +5,10 @@ const ALLOWED_SUFFIXES = [".trycloudflare.com"];
 function getCorsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,OPTIONS,PATCH,DELETE,POST,PUT",
-    "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, x-dht-target",
+    "Access-Control-Allow-Methods": "GET, OPTIONS, POST",
+    "Access-Control-Allow-Headers": "Content-Type, x-dht-target, Accept",
     "Access-Control-Allow-Credentials": "true",
-    "x-dht-proxy": "1", // LOWERCASE to perfectly match Build 5's script.js!
+    "x-dht-proxy": "1" // This lets script.js know the proxy is validated!
   };
 }
 
@@ -24,15 +24,12 @@ function reply(status, message) {
 
 function isAllowedHost(hostname) {
   const host = hostname.toLowerCase();
-  const extra = (process.env.ALLOWED_HOSTS || "")
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-  return ALLOWED_SUFFIXES.some((suffix) => host.endsWith(suffix)) || extra.includes(host);
+  // Safe extraction for Edge runtime environments
+  return ALLOWED_SUFFIXES.some((suffix) => host.endsWith(suffix));
 }
 
 export default async function handler(request) {
-  // 1. Handle browser preflight OPTIONS requests effortlessly
+  // 1. Immediately return 200 for CORS preflight validation checks
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
@@ -44,7 +41,11 @@ export default async function handler(request) {
     return reply(405, "Method not allowed");
   }
 
-  const target = request.headers.get("x-dht-target") || process.env.OLLAMA_URL || "";
+  // 2. Safely grab the endpoint address from headers
+  const target = request.headers.get("x-dht-target") || "";
+  if (!target) {
+    return reply(400, "Missing x-dht-target address header.");
+  }
 
   let url;
   try {
@@ -59,27 +60,33 @@ export default async function handler(request) {
 
   const payload = await request.text();
 
-  let upstream;
   try {
-    upstream = await fetch(url.origin + "/api/chat", {
+    // 3. Connect straight out to your local Ollama instance tunnel
+    const upstream = await fetch(url.origin + "/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: payload,
     });
+
+    if (!upstream.ok) {
+      return new Response(await upstream.text(), {
+        status: upstream.status,
+        headers: getCorsHeaders(),
+      });
+    }
+
+    // 4. Clean stream pipeline return 
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: {
+        ...getCorsHeaders(),
+        "Content-Type": upstream.headers.get("Content-Type") || "application/x-ndjson",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "X-Accel-Buffering": "no",
+      },
+    });
+
   } catch (error) {
-    return reply(502, "Tunnel unreachable: " + String(error && error.message ? error.message : error));
+    return reply(502, "Tunnel unreachable: " + String(error.message || error));
   }
-
-  // 2. Combine the upstream stream data with the required browser CORS permissions
-  const outboundHeaders = {
-    ...getCorsHeaders(),
-    "Content-Type": upstream.headers.get("Content-Type") || "application/x-ndjson",
-    "Cache-Control": "no-store",
-    "X-Accel-Buffering": "no",
-  };
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    headers: outboundHeaders,
-  });
 }
