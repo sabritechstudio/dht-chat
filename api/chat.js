@@ -46,7 +46,7 @@ export default async function handler(request) {
       body: payload,
     });
   } catch (error) {
-    return reply(502, "Tunnel unreachable");
+    return reply(502, "Tunnel unreachable: " + String(error && error.message ? error.message : error));
   }
 
   return new Response(upstream.body, {
