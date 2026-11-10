@@ -17,6 +17,7 @@ const DEFAULT_ENDPOINT = "https://freeze-him-arabia-professional.trycloudflare.c
 const MODEL_NAME = "openbmb/minicpm5:latest";
 const GREETING = "DHT online. How can I help you?";
 const MAX_CONTEXT_MESSAGES = 20;
+const BUILD_ID = "DHT build 4";
 
 const SYSTEM_PROMPT =
   "You are DHT, an expert computing AI built by DHT-GHOST working for Noor.";
@@ -34,6 +35,8 @@ let currentSessionId = "";
 let sessionsMemory = {};
 let isStreaming = false;
 let abortController = null;
+
+console.log(BUILD_ID);
 
 function readStorage(key) {
   try {
@@ -80,24 +83,67 @@ function saveEndpoint() {
   }, 1500);
 }
 
+function isLocalPage() {
+  const host = window.location.hostname;
+  return (
+    window.location.protocol === "file:" ||
+    host === "" ||
+    host === "localhost" ||
+    host === "127.0.0.1"
+  );
+}
+
+async function openStream(payload, signal) {
+  const base = getEndpointBase();
+
+  const direct = () =>
+    fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: payload,
+      signal: signal,
+    });
+
+  if (isLocalPage()) return direct();
+
+  try {
+    const proxied = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-dht-target": base },
+      body: payload,
+      signal: signal,
+    });
+
+    if (proxied.headers.get("x-dht-proxy") === "1") return proxied;
+    if (proxied.status !== 404 && proxied.status !== 405) return proxied;
+  } catch (error) {
+    if (error.name === "AbortError") throw error;
+    console.error("Proxy request failed", error);
+  }
+
+  return direct();
+}
+
 function describeFault(fault) {
   const status = fault && fault.status;
+  const suffix = fault && fault.detail ? " (" + fault.detail + ")" : "";
+
   if (status === 403) {
-    return "Server rejected the request (403). Start Ollama with OLLAMA_ORIGINS=* and run the tunnel with --http-host-header=localhost:11434.";
+    return "Server rejected the request (403)." + suffix + " Restart the tunnel with --http-host-header=localhost:11434.";
   }
   if (status === 404) {
-    return "Endpoint or model not found (404). Check the URL in Settings and make sure the model is installed on the host.";
+    return "Endpoint or model not found (404)." + suffix + " Check the URL in Settings and the model name on the host.";
   }
   if (status === 502 || status === 503 || status === 504 || status === 524 || status === 530 || status === 1033) {
-    return "The tunnel or host is offline. Restart it and paste the new URL in Settings.";
+    return "The tunnel or host is offline." + suffix + " Restart it and paste the new URL in Settings.";
   }
   if (status) {
-    return "Server error (" + status + "). Check the host and try again.";
+    return "Server error (" + status + ")." + suffix;
   }
   if (fault && fault.message && fault.name !== "TypeError") {
     return fault.message;
   }
-  return "Cannot reach the server. Make sure the tunnel is running, the URL in Settings is correct, and Ollama has OLLAMA_ORIGINS=* set.";
+  return "Cannot reach the server (" + BUILD_ID + "). Open the console (F12) and check the red error.";
 }
 
 function applyTheme(id) {
@@ -388,41 +434,6 @@ function buildApiMessages(session) {
   return [{ role: "system", content: SYSTEM_PROMPT }].concat(history);
 }
 
-function isLocalPage() {
-  const host = window.location.hostname;
-  return window.location.protocol === "file:" || host === "" || host === "localhost" || host === "127.0.0.1";
-}
-
-async function openStream(payload, signal) {
-  const base = getEndpointBase();
-
-  const direct = () =>
-    fetch(base + "/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: payload,
-      signal: signal,
-    });
-
-  if (isLocalPage()) return direct();
-
-  try {
-    const proxied = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-dht-target": base },
-      body: payload,
-      signal: signal,
-    });
-
-    if (proxied.headers.get("x-dht-proxy") === "1") return proxied;
-    if (proxied.status !== 404 && proxied.status !== 405) return proxied;
-  } catch (error) {
-    if (error.name === "AbortError") throw error;
-  }
-
-  return direct();
-}
-
 async function transmitUserPrompt() {
   if (isStreaming) {
     abortStream();
@@ -498,7 +509,7 @@ async function transmitUserPrompt() {
   };
 
   try {
-        const streamConnection = await openStream(
+    const streamConnection = await openStream(
       JSON.stringify({
         model: MODEL_NAME,
         messages: apiMessages,
@@ -508,8 +519,15 @@ async function transmitUserPrompt() {
     );
 
     if (!streamConnection.ok) {
-      const httpFault = new Error("HTTP " + streamConnection.status);
+      let detail = "";
+      try {
+        const body = await streamConnection.text();
+        const data = JSON.parse(body);
+        detail = typeof data.error === "string" ? data.error : "";
+      } catch (error) {}
+      const httpFault = new Error(detail || "HTTP " + streamConnection.status);
       httpFault.status = streamConnection.status;
+      httpFault.detail = detail;
       throw httpFault;
     }
 
